@@ -228,7 +228,8 @@ function showR(){
  }
  $("res").innerHTML=R.map((r,i)=>`<button class="card" style="width:100%;text-align:left;margin:8px 0 0;display:flex;gap:10px;align-items:center" onclick="pick(${i})">${cov(r,'style="width:40px;border-radius:3px"')}<div><b>${esc(r.title)}</b><div class="sub">${esc(r.author)}${r.pages?`・${r.pages}ページ`:""}・検索元: ${r.ai?"AI推定":esc(r.src)}</div></div></button>`).join("")+(R.some(r=>r.ai)?`<div class="sub" style="margin-top:8px">※AIによる推定です。タイトル・ページ数は確認してください。</div>`:"");
 }
-function pick(i){const r=R[i];$("t").value=r.title||"";$("au").value=r.author||"";$("pp").value=r.pages||"";V.isbn=r.isbn||V.isbn||"";V.cover=r.cover||"";$("res").innerHTML=""}
+async function pick(i){const r=R[i];$("t").value=r.title||"";$("au").value=r.author||"";$("pp").value=r.pages||"";V.isbn=r.isbn||V.isbn||"";V.cover=r.cover||"";$("res").innerHTML="";
+ if(!r.pages&&r.isbn){try{const g=await gb("isbn:"+r.isbn);if(g[0]&&g[0].pages&&!$("pp").value)$("pp").value=g[0].pages}catch(e){}}}
 async function search(code){
  const q=(typeof code==="string"?code:$("q").value).trim();if(!q)return;
  $("q").value=q;msg("検索中…");
@@ -237,9 +238,27 @@ async function search(code){
  if(!R.length)R=await lookupAI(isb?n:q,isb);
  showR();
 }
-async function gb(q){
- const j=await(await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=8&q="+encodeURIComponent(q))).json();
+async function gb(q,ja){
+ const j=await(await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=10&printType=books"+(ja?"&langRestrict=ja":"")+"&q="+encodeURIComponent(q))).json();
+ if(j.error)throw new Error("Google Books: "+(j.error.message||j.error.code));
  return(j.items||[]).map(x=>{const v=x.volumeInfo||{};return{title:(v.title||"")+(v.subtitle?" "+v.subtitle:""),author:(v.authors||[]).join(", "),pages:v.pageCount,isbn:((v.industryIdentifiers||[]).find(i=>i.type==="ISBN_13")||{}).identifier,cover:((v.imageLinks||{}).thumbnail||"").replace("http://","https://").replace("&edge=curl",""),src:"Google Books"}});
+}
+async function ndl(q){
+ const t=await(await fetch("https://ndlsearch.ndl.go.jp/api/opensearch?cnt=10&any="+encodeURIComponent(q))).text();
+ const d=new DOMParser().parseFromString(t,"text/xml");
+ return[...d.getElementsByTagName("item")].map(it=>{
+  const g=n=>{const e=it.getElementsByTagName(n)[0];return e?e.textContent.trim():""};
+  const e=[...it.getElementsByTagName("dc:identifier")].find(e=>e.getAttribute("xsi:type")==="dcndl:ISBN");
+  const n=e?e.textContent.replace(/\D/g,""):"";
+  return{title:g("dc:title"),author:g("dc:creator"),isbn:n.length===13?n:"",src:"NDLサーチ"};
+ }).filter(x=>x.title);
+}
+async function lookupTitle(q){
+ const r=await Promise.allSettled([ndl(q),gb(q,true)]);
+ const seen=new Set();let out=[];
+ r.forEach(x=>{if(x.status==="fulfilled")x.value.forEach(b=>{const k=b.isbn||b.title+b.author;if(!seen.has(k)){seen.add(k);out.push(b)}});else WEBERR=String((x.reason&&x.reason.message)||x.reason)});
+ if(!out.length){try{out=await gb(q,false)}catch(e){WEBERR=String((e&&e.message)||e)}}
+ return out.slice(0,10);
 }
 async function lookupWeb(q,isbn){
  let out=[];
@@ -250,7 +269,7 @@ async function lookupWeb(q,isbn){
    if(s){out=[{title:s.title,author:s.author,isbn,cover:s.cover||"",src:"openBD"}];
     try{const g=await gb("isbn:"+isbn);if(g[0]){if(g[0].pages)out[0].pages=g[0].pages;if(!out[0].cover)out[0].cover=g[0].cover}}catch(e){}}
    else out=await gb("isbn:"+isbn);
-  }else out=await gb(q);
+  }else out=await lookupTitle(q);
  }catch(e){WEBERR=String((e&&e.message)||e)}
  return out;
 }
