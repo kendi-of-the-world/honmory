@@ -63,7 +63,13 @@ label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
 const K="honmory-v1";
 const COLORS=["#2f6f62","#b5483a","#3d5a80","#8a6a3b","#6b4e71","#4a6b3a","#a65d3f","#445260"];
 const ST={reading:"読書中",want:"読みたい",done:"読了"};
-const cov=(b,st)=>{const u=[b.cover,b.isbn&&"https://ndlsearch.ndl.go.jp/thumbnail/"+b.isbn+".jpg",b.isbn&&"https://cover.openbd.jp/"+b.isbn+".jpg"].filter(Boolean);return u.length?`<img src="${esc(u[0])}" data-u="${esc(JSON.stringify(u.slice(1)))}" alt="" loading="lazy" referrerpolicy="no-referrer" ${st||""} onerror="nx(this)">`:""};
+const i10=n=>{if(!/^978\d{10}$/.test(n||""))return"";const d=n.slice(3,12);let t=0;for(let i=0;i<9;i++)t+=(10-i)*+d[i];const c=(11-t%11)%11;return d+(c===10?"X":c)};
+const cov=(b,st)=>{const n=b.isbn,t=i10(n),u=[b.cover,t&&"https://images-na.ssl-images-amazon.com/images/P/"+t+".09.LZZZZZZZ.jpg",n&&"https://www.hanmoto.com/bd/img/"+n+".jpg",n&&"https://ndlsearch.ndl.go.jp/thumbnail/"+n+".jpg",n&&"https://cover.openbd.jp/"+n+".jpg",n&&"https://books.google.com/books/content?vid=ISBN"+n+"&printsec=frontcover&img=1&zoom=1"].filter(Boolean);return u.length?`<img src="${esc(u[0])}" data-u="${esc(JSON.stringify(u.slice(1)))}" alt="" loading="lazy" referrerpolicy="no-referrer" ${st||""} onload="if(this.naturalWidth<=50)nx(this)" onerror="nx(this)">`:""};
+function setCover(id,f){
+ if(!f)return;const r=new FileReader();
+ r.onload=()=>{const im=new Image();im.onload=()=>{const w=240,h=Math.round(im.height*w/im.width),c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(im,0,0,w,h);book(id).cover=c.toDataURL("image/jpeg",.8);save();render()};im.src=r.result};
+ r.readAsDataURL(f);
+}
 function nx(i){let r=[];try{r=JSON.parse(i.dataset.u)}catch(e){}if(r.length){i.dataset.u=JSON.stringify(r.slice(1));i.src=r[0]}else i.remove()}
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -123,6 +129,7 @@ function detailView(b){
  <div class="sp"><div style="font-weight:700;font-size:17px">${esc(b.title)}</div><div class="sub">${esc(b.author)||"著者未設定"}</div>
  <select style="margin-top:8px" onchange="setSt(${b.id},this.value)">${Object.keys(ST).map(k=>`<option value="${k}" ${b.status===k?"selected":""}>${ST[k]}</option>`).join("")}</select>
  <div style="margin-top:6px">${[1,2,3,4,5].map(n=>`<button class="star ${b.rating>=n?"on":""}" aria-label="評価${n}" onclick="rate(${b.id},${n})">★</button>`).join("")}</div></div></div>
+ <div style="margin:-4px 0 12px"><label class="btn g" style="margin:0;font-size:14px;color:var(--tx);cursor:pointer;display:inline-block">🖼 表紙を設定（写真・画像）<input type="file" accept="image/*" hidden onchange="setCover(${b.id},this.files[0])"></label></div>
  <div class="card"><div class="row"><b>${b.cur}${b.pages?` / ${b.pages}`:""} ページ</b><span class="sp"></span><span class="sub">${pct(b)}%・累計 ${Math.floor(mins/60)}時間${mins%60}分</span></div>
  <div class="pg" style="height:8px"><span style="width:${pct(b)}%"></span></div></div>
  <div class="card"><div class="timer" id="tm">${run?"":"00:00:00"}</div>
