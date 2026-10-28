@@ -63,7 +63,8 @@ label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
 const K="honmory-v1";
 const COLORS=["#2f6f62","#b5483a","#3d5a80","#8a6a3b","#6b4e71","#4a6b3a","#a65d3f","#445260"];
 const ST={reading:"読書中",want:"読みたい",done:"読了"};
-const cov=b=>b.cover?`<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:"";
+const cov=(b,st)=>{const u=[b.cover,b.isbn&&"https://ndlsearch.ndl.go.jp/thumbnail/"+b.isbn+".jpg",b.isbn&&"https://cover.openbd.jp/"+b.isbn+".jpg"].filter(Boolean);return u.length?`<img src="${esc(u[0])}" data-u="${esc(JSON.stringify(u.slice(1)))}" alt="" loading="lazy" referrerpolicy="no-referrer" ${st||""} onerror="nx(this)">`:""};
+function nx(i){let r=[];try{r=JSON.parse(i.dataset.u)}catch(e){}if(r.length){i.dataset.u=JSON.stringify(r.slice(1));i.src=r[0]}else i.remove()}
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const today=()=>iso(new Date());
@@ -218,7 +219,7 @@ function showR(){
   const m={unavailable:"見つかりませんでした。入力内容を確認するか、下のフォームから手入力で追加してください。",not_granted:"AI検索の許可が必要です。許可してもう一度検索してください。",rate_limited:"利用が集中しています。しばらく待ってから再試行してください。"}[AIERR];
   return msg((m||"見つかりませんでした。ISBNはAIが判別できないことがあるので、タイトルで検索するか手入力してください。")+(AIERR&&!m?"（"+AIERR+"）":"")+(AIDBG?"（応答: "+esc(AIDBG)+"）":"")+(WEBERR?"（通信: "+esc(WEBERR)+"）":""));
  }
- $("res").innerHTML=R.map((r,i)=>`<button class="card" style="width:100%;text-align:left;margin:8px 0 0;display:flex;gap:10px;align-items:center" onclick="pick(${i})">${r.cover?`<img src="${esc(r.cover)}" alt="" referrerpolicy="no-referrer" style="width:40px;border-radius:3px" onerror="this.remove()">`:""}<div><b>${esc(r.title)}</b><div class="sub">${esc(r.author)}${r.pages?`・${r.pages}ページ`:""}・検索元: ${r.ai?"AI推定":esc(r.src)}</div></div></button>`).join("")+(R.some(r=>r.ai)?`<div class="sub" style="margin-top:8px">※AIによる推定です。タイトル・ページ数は確認してください。</div>`:"");
+ $("res").innerHTML=R.map((r,i)=>`<button class="card" style="width:100%;text-align:left;margin:8px 0 0;display:flex;gap:10px;align-items:center" onclick="pick(${i})">${cov(r,'style="width:40px;border-radius:3px"')}<div><b>${esc(r.title)}</b><div class="sub">${esc(r.author)}${r.pages?`・${r.pages}ページ`:""}・検索元: ${r.ai?"AI推定":esc(r.src)}</div></div></button>`).join("")+(R.some(r=>r.ai)?`<div class="sub" style="margin-top:8px">※AIによる推定です。タイトル・ページ数は確認してください。</div>`:"");
 }
 function pick(i){const r=R[i];$("t").value=r.title||"";$("au").value=r.author||"";$("pp").value=r.pages||"";V.isbn=r.isbn||V.isbn||"";V.cover=r.cover||"";$("res").innerHTML=""}
 async function search(code){
