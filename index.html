@@ -28,6 +28,8 @@ button{cursor:pointer}
 .cv b{font-family:"Hiragino Mincho ProN","Noto Serif JP",serif;font-size:13px;line-height:1.35;word-break:break-all}
 .cv i{font-style:normal;font-size:10px;opacity:.85}
 .cv img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cv.stack{margin:0 8px 8px 0;box-shadow:inset 5px 0 0 rgba(0,0,0,.18),4px 4px 0 0 #b9b2a8,8px 8px 0 0 #8f877d}
+.bd{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:1px 8px;border-radius:10px;z-index:1}
 .pg{height:4px;background:var(--line);border-radius:2px;margin-top:6px;overflow:hidden}
 .pg span{display:block;height:100%;background:var(--ac)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
@@ -80,15 +82,17 @@ function seed(){return {goal:2,books:[
 {id:3,title:"銀河鉄道の夜",author:"宮沢賢治",pages:150,cur:0,status:"want",rating:0,color:COLORS[2],sessions:[],notes:[]}]}}
 function load(){try{const j=JSON.parse(localStorage.getItem(K));if(j&&j.books)return j}catch(e){}return seed()}
 function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
-let S=load(),V={tab:"shelf",f:"reading",open:null,add:false,mo:0},T=null,tick=null;
+let S=load(),V={tab:"shelf",f:"reading",open:null,add:false,mo:0,series:null,pre:null},T=null,tick=null;
 const $=id=>document.getElementById(id);
 const book=id=>S.books.find(b=>b.id===id);
 const pct=b=>b.pages?Math.min(100,Math.round(b.cur/b.pages*100)):0;
 
 function render(){
  const a=$("app");
+ if(V.series&&!S.books.some(b=>b.series===V.series))V.series=null;
  if(V.add)a.innerHTML=addView();
  else if(V.open)a.innerHTML=detailView(book(V.open));
+ else if(V.series)a.innerHTML=seriesView(V.series);
  else a.innerHTML=mainView();
  if(T&&V.open===T.id)startTick();
 }
@@ -98,19 +102,38 @@ function mainView(){
  <button class="${V.tab==="stats"?"on":""}" onclick="V.tab='stats';render()">記録</button></div>`
  +(V.tab==="shelf"?shelfView()+`<button class="fab" aria-label="本を追加" onclick="V.add=true;render()">＋</button>`:statsView());
 }
+const SN=[];
 function shelfView(){
  const tabs=Object.keys(ST).map(k=>`<button class="${V.f===k?"on":""}" onclick="V.f='${k}';render()">${ST[k]} ${S.books.filter(b=>b.status===k).length}</button>`).join("");
  const list=S.books.filter(b=>b.status===V.f);
- return `<div class="tabs">${tabs}</div>`+(list.length?`<div class="grid">${list.map(b=>`<button class="bk" onclick="V.open=${b.id};render()"><div class="cv" style="background:${b.color}"><b>${esc(b.title)}</b><i>${esc(b.author)}</i>${cov(b)}</div>${b.status==="reading"?`<div class="pg"><span style="width:${pct(b)}%"></span></div>`:""}</button>`).join("")}</div>`:`<div class="empty">この棚にはまだ本がありません。<br>右下の＋から追加できます。</div>`);
+ SN.length=0;const gm={},items=[];
+ list.forEach(b=>{if(b.series){if(!gm[b.series]){gm[b.series]=[];items.push({s:b.series,g:gm[b.series]})}gm[b.series].push(b)}else items.push({b})});
+ const html=items.map(x=>{
+  if(x.b){const b=x.b;return `<button class="bk" onclick="V.open=${b.id};render()"><div class="cv" style="background:${b.color}"><b>${esc(b.title)}</b><i>${esc(b.author)}</i>${cov(b)}</div>${b.status==="reading"?`<div class="pg"><span style="width:${pct(b)}%"></span></div>`:""}</button>`}
+  const g=x.g.slice().sort((a,c)=>(a.vol||0)-(c.vol||0)),f=g[0];SN.push(x.s);
+  return `<button class="bk" onclick="V.series=SN[${SN.length-1}];render()"><div class="cv stack" style="background:${f.color}"><b>${esc(x.s)}</b>${cov(f)}<span class="bd">${g.length}冊</span></div></button>`;
+ }).join("");
+ return `<div class="tabs">${tabs}</div>`+(items.length?`<div class="grid">${html}</div>`:`<div class="empty">この棚にはまだ本がありません。<br>右下の＋から追加できます。</div>`);
 }
-function addView(){V.isbn="";V.cover="";
- return `<button class="back" onclick="stopScan();V.add=false;render()">‹ 戻る</button><h1>本を追加</h1><div class="card">
+function seriesView(s){
+ const g=S.books.filter(b=>b.series===s).sort((a,c)=>(a.vol||0)-(c.vol||0));
+ const done=g.filter(b=>b.status==="done").length,next=Math.max(0,...g.map(b=>b.vol||0))+1;
+ return `<button class="back" onclick="V.series=null;render()">‹ 本棚</button><h1>${esc(s)}</h1>
+ <div class="sub" style="margin:-8px 0 14px">${g.length}冊登録・読了${done}冊</div>
+ <div class="grid">${g.map(b=>`<button class="bk" onclick="V.open=${b.id};render()"><div class="cv" style="background:${b.color}"><b>${esc(b.title)}</b>${cov(b)}</div><div class="sub" style="text-align:center;font-size:12px;margin-top:4px">${b.vol?b.vol+"巻・":""}${ST[b.status]}</div></button>`).join("")}</div>
+ <button class="btn g" style="margin-top:18px;width:100%" onclick="addNext(${next})">＋ 次の巻を追加（${next}巻）</button>`;
+}
+function addNext(n){V.pre={series:V.series,vol:n};V.add=true;render()}
+function setSeries(id,s,v){const b=book(id);if(s!==null)b.series=s.trim();if(v!==null)b.vol=+v||0;save()}
+function addView(){V.isbn="";V.cover="";const pre=V.pre||{};
+ return `<button class="back" onclick="stopScan();V.add=false;V.pre=null;render()">‹ 戻る</button><h1>本を追加</h1><div class="card">
  <label style="margin-top:0">ISBN・タイトルで探す</label><div class="row"><input id="q" placeholder="ISBN または タイトル" onkeydown="if(event.key==='Enter')search()"><button class="btn" style="flex:none" onclick="search()">検索</button></div>
  <div class="row" style="margin-top:8px"><button class="btn g sp" onclick="scan()">📷 バーコード</button><label class="btn g sp" style="margin:0;font-size:16px;text-align:center;color:var(--tx);cursor:pointer">写真から読み取る<input type="file" accept="image/*" capture="environment" hidden onchange="scanFile(this.files[0])"></label></div>
  <video id="vid" playsinline muted style="display:none;width:100%;border-radius:8px;margin-top:8px"></video><div id="res"></div>
  <hr style="border:0;border-top:1px solid var(--line);margin:16px 0 0">
  <label>タイトル</label><input id="t" placeholder="例：坊っちゃん">
  <label>著者</label><input id="au">
+ <div class="row" style="align-items:flex-end"><div style="flex:3"><label>シリーズ名（任意）</label><input id="sr" value="${esc(pre.series||"")}" placeholder="例：ONE PIECE"></div><div style="flex:1"><label>巻</label><input id="vl" type="number" min="0" inputmode="numeric" value="${pre.vol||""}"></div></div>
  <label>総ページ数</label><input id="pp" type="number" min="1" inputmode="numeric">
  <label>状態</label><select id="st"><option value="want">読みたい</option><option value="reading" selected>読書中</option><option value="done">読了</option></select>
  <div class="row" style="margin-top:16px"><button class="btn sp" onclick="addBook()">保存</button></div></div>`;
@@ -118,17 +141,18 @@ function addView(){V.isbn="";V.cover="";
 function addBook(){
  const t=$("t").value.trim();if(!t){$("t").focus();return}stopScan();
  const id=Date.now(),st=$("st").value,pages=+$("pp").value||0;
- S.books.push({id,title:t,author:$("au").value.trim(),pages,cur:st==="done"?pages:0,status:st,rating:0,color:COLORS[id%COLORS.length],fin:st==="done"?today():null,isbn:V.isbn||"",cover:V.cover||"",sessions:[],notes:[]});V.isbn="";V.cover="";
- save();V.add=false;V.f=st;render();
+ S.books.push({id,title:t,author:$("au").value.trim(),pages,cur:st==="done"?pages:0,status:st,rating:0,color:COLORS[id%COLORS.length],fin:st==="done"?today():null,isbn:V.isbn||"",cover:V.cover||"",series:$("sr").value.trim(),vol:+$("vl").value||0,sessions:[],notes:[]});V.isbn="";V.cover="";
+ save();V.add=false;V.pre=null;V.f=st;render();
 }
 function detailView(b){
  const run=T&&T.id===b.id;
  const mins=b.sessions.reduce((s,x)=>s+x.min,0);
- return `<button class="back" onclick="V.open=null;render()">‹ 本棚</button>
+ return `<button class="back" onclick="V.open=null;render()">‹ 戻る</button>
  <div class="card row" style="align-items:flex-start"><div class="cv" style="background:${b.color};width:84px;flex:none"><b style="font-size:11px">${esc(b.title)}</b>${cov(b)}</div>
  <div class="sp"><div style="font-weight:700;font-size:17px">${esc(b.title)}</div><div class="sub">${esc(b.author)||"著者未設定"}</div>
  <select style="margin-top:8px" onchange="setSt(${b.id},this.value)">${Object.keys(ST).map(k=>`<option value="${k}" ${b.status===k?"selected":""}>${ST[k]}</option>`).join("")}</select>
  <div style="margin-top:6px">${[1,2,3,4,5].map(n=>`<button class="star ${b.rating>=n?"on":""}" aria-label="評価${n}" onclick="rate(${b.id},${n})">★</button>`).join("")}</div></div></div>
+ <div class="card" style="padding:10px 14px"><div class="row"><input style="flex:3" placeholder="シリーズ名（任意）" value="${esc(b.series||"")}" onchange="setSeries(${b.id},this.value,null)"><input style="flex:1" type="number" min="0" inputmode="numeric" placeholder="巻" value="${b.vol||""}" onchange="setSeries(${b.id},null,this.value)"></div></div>
  <div style="margin:-4px 0 12px"><label class="btn g" style="margin:0;font-size:14px;color:var(--tx);cursor:pointer;display:inline-block">🖼 表紙を設定（写真・画像）<input type="file" accept="image/*" hidden onchange="setCover(${b.id},this.files[0])"></label></div>
  <div class="card"><div class="row"><b>${b.cur}${b.pages?` / ${b.pages}`:""} ページ</b><span class="sp"></span><span class="sub">${pct(b)}%・累計 ${Math.floor(mins/60)}時間${mins%60}分</span></div>
  <div class="pg" style="height:8px"><span style="width:${pct(b)}%"></span></div></div>
@@ -229,6 +253,7 @@ function showR(){
  $("res").innerHTML=R.map((r,i)=>`<button class="card" style="width:100%;text-align:left;margin:8px 0 0;display:flex;gap:10px;align-items:center" onclick="pick(${i})">${cov(r,'style="width:40px;border-radius:3px"')}<div><b>${esc(r.title)}</b><div class="sub">${esc(r.author)}${r.pages?`・${r.pages}ページ`:""}・検索元: ${r.ai?"AI推定":esc(r.src)}</div></div></button>`).join("")+(R.some(r=>r.ai)?`<div class="sub" style="margin-top:8px">※AIによる推定です。タイトル・ページ数は確認してください。</div>`:"");
 }
 async function pick(i){const r=R[i];$("t").value=r.title||"";$("au").value=r.author||"";$("pp").value=r.pages||"";V.isbn=r.isbn||V.isbn||"";V.cover=r.cover||"";$("res").innerHTML="";
+ {const m=(r.title||"").match(/^(.+?)(?:[\s\u3000]+第?|[（(]第?|第)(\d{1,3})[)）]?巻?$/);if(m&&!$("sr").value){$("sr").value=m[1].trim();$("vl").value=m[2]}}
  if(!r.pages&&r.isbn){try{const g=await gb("isbn:"+r.isbn);if(g[0]&&g[0].pages&&!$("pp").value)$("pp").value=g[0].pages}catch(e){}}}
 async function search(code){
  const q=(typeof code==="string"?code:$("q").value).trim();if(!q)return;
